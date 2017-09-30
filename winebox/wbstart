@@ -1,0 +1,265 @@
+#!/bin/bash
+
+### WineBox Start
+
+# Предотвращаем запуск скрипта от имени суперпользователя(root)
+if [ ! "$ROOT" ] && [ "$EUID" == "0" ]; then
+    echo "Запускайте скрипт без root прав!"
+    exit
+fi
+
+########################################################
+
+### WineBox - набор скриптов для удобного портирования программ
+### в Wine. Данный набор скриптов основан на скриптах от Kron'a.
+### Суть работы скрипта заключается в создании изолированного
+### префикса, в котором и содержится программа. Одновременно в
+### префиксе может содержиться лишь одна программа, однако
+### допускается установка дополтинельных программ-зависимостей.
+
+### WineBox Start - основной скрипт, который определяет параметры
+### приложения, его расположение и выполняет его запуск. Секрет
+### его работы заключается в использовании sandbox окружения,
+### которое активируется другим сторонним скриптом - winetricks.
+
+### Для того, чтобы портировать приложение, вам нужно поместить
+### этот скрипт в папку, в которой и будет расположено ваше
+### приложение. Далее, вам нужно поместить папку с программой
+### по пути [папка со скриптом]/prefix/drive_c . После чего
+### вам будет необходимо настроить ряд параметров,
+### представленных ниже.
+
+########################################################
+# Параметры, специфичные для приложения:
+# export APP_NAME="Calculator"         - имя программы
+# export APP_VER="1.88.5"              - версия программы
+# export APP_FOLDER="CALC"             - расположения программы в папке prefix/drive_c .
+#                                        Если исполняемый файл программы расположен 
+#                                        по пути [папка со скриптом]/prefix/drive_c/CALC/calc.exe,
+#                                        то следует указать только папку CALC. (export APP_FOLDER="CALC/")
+# export APP_EXE="fixer.exe"           - имя исполняемого файла программы.
+#                                        Тут следует указать имя .exe файла, который должен быть запущен и
+#                                        который находится по пути, указанному выше(в нашем случае - это calc.exe)
+
+export APP_NAME="Ultimate Apocalypse THB"
+export APP_VER="1.88.5"
+export APP_FOLDER="UAMOD/DOW/"
+export APP_EXE="fixer.exe"
+
+########################################################
+# Параметры, специфичные для самого Wine:
+# export WINE_CSMT="off"               - Использовать ли CSMT?
+#                                        CSMT - это особый режим, который присутствует только в Wine-Staging.
+#                                        Если у вас обычный Wine, НЕ ИСПОЛЬЗУЙТЕ ЭТОТ РЕЖИМ и оставьте "off".
+#                                        Если у вас Wine-Staging, использовать этот режим не рекомендуется так же.
+#                                        Однако, включение данного режима может несколько повысить быстродействие
+#                                        некоторых игр и 3D приложений, но это происходит редко. Экспериментируйте.
+# export WINE_FORCEDX9="yes"           - Использовать ли принудительно DirectX 9?
+#                                        Если ваше приложение использует DirectX 11 - ставьте "no",
+#                                        во всех иных случаях, оставьте "yes".
+# export WINE_WINDOWED="yes"           - Запускать ли приложение, в искусственном окне?
+#                                        Если ваше приложение работет в полноэкранном режиме, оставьте "yes",
+#                                        в иных случаях - ставьте "no".
+# export WINE_RESOLUTION="1366x768"    - Какое разрешение использовать для искусственного полноэкранного режима(ИПР)?
+#                                        Даже, если вы не используете ИПР, рекомендуется записать сюда разрешение вашего экрана.
+# export WINE_FIXRES="no"              - Использовать ли автоисправление разрешения экрана?
+#                                        В некоторых случаях, программы могут сбивать резрешение вашего экрана. Однако,
+#                                        Это может произойти лишь в полноэкранных приложениях(для которых рекомендована установка ИПР).
+#                                        Если по каким-то причинам ИПР вам не подходит, вы можете включить этот режим, установим значение
+#                                        "yes". Во всех остальных случаях крайне рекомендуется оставить как есть "no".
+# export WINE_USESYSWINE="yes"         - Использовать ли системный Wine?
+#                                        Если вы установили Wine из репозиториев своего дистрибутива, оставьте как есть "yes".
+#                                        Если же вы готовы собирать Wine из исходников, руками доустанавливать зависимости,
+#                                        можете установить "no". Однако, КРАЙНЕ РЕКОМЕНДУЕТСЯ УСТАНОВИТЬ WINE ИЗ РЕПОЗИТОРИЕВ
+#                                        ПРИ ПОМОЩИ ПАКЕТНОГО МЕНЕДЖЕРА! Почему? Всё потому, что установка таким образом
+#                                        гарантирует то, что все зависимости будут удовлетворены. В противном случае, возможны
+#                                        самые разные ошибки. Так что лучше установите Wine из репозиториев вашего дистрибутива,
+#                                        или попробуйте установить Wine-Staging(wine-staging.com).
+
+export WINE_CSMT="off"
+export WINE_FORCEDX9="yes"
+export WINE_WINDOWED="yes"
+export WINE_RESOLUTION="1366x768"
+export WINE_FIXRES="no"
+export WINE_USESYSWINE="yes"
+
+########################################################
+
+export USER="$(id -u -n)"
+
+export SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+export DIR="$(dirname "$SCRIPT")"
+export RHOME="$HOME"
+export HOME="$DIR/home"
+
+export WINETRICKS="$DIR/winetricks"
+
+export WINEPREFIX="$DIR/prefix"
+export WINEDEBUG="-all"
+export WINEDLLOVERRIDES="mscoree,mshtml="
+export UPDATEPREFIX="yes"
+
+export CORES="$(getconf _NPROCESSORS_ONLN)"
+export WORK_FOLDER="$WINEPREFIX/drive_c/$APP_FOLDER"
+
+# Если у нас одноядерный процессор, принудительно отключаем CSMT.
+if [ "$CORES" == "1" ]; then 
+    export CSMT="off"
+fi
+
+# Если у нас обычный Wine, а не Staging, принудительно отключаем CSMT.
+if [ "$WINE_CSMT" == "on" ] && [[ ! "$WINE_VER" == *"Staging"* ]]; then
+    export CSMT="off"
+fi
+
+if [ "$WINE_USESYSWINE" == "yes" ]; then 
+    if [ -f "$DIR/syswine" ]; then
+        source "$DIR/syswine"
+    fi
+    if [ ! -f "$WINE" ]; then 
+        if [ -f "/usr/bin/wine" ]; then
+            export WINE="/usr/bin/wine"
+            export REGEDIT="/usr/bin/regedit"
+        elif [ -f "/usr/bin/wine-development" ]; then
+            export WINE="/usr/bin/wine-development"
+            export REGEDIT="/usr/bin/regedit-development"
+        elif [ -f "/usr/local/bin/wine" ]; then
+            export WINE="/usr/local/bin/wine"
+            export REGEDIT="/usr/local/bin/regedit"
+        fi
+        if [ "$WINE" ]; then
+            rm -f "$DIR/syswine"
+            echo "export WINE='$WINE'" >> "$DIR/syswine"
+            echo "export REGEDIT='$REGEDIT'" >> "$DIR/syswine"
+        fi
+    fi
+elif [ -f "$DIR/syswine" ]; then
+    rm "$DIR/syswine"
+fi
+
+if [ ! "$WINE" ]; then
+    export WINE="$DIR/wine/bin/wine"
+    export REGEDIT="$DIR/wine/bin/regedit"
+fi
+
+# Устанавливаем версию вайна
+export WINE_VER="$("$WINE" --version)"
+
+# Если каких-то файлов не хватает, выходим из скрипта.
+if [ ! -f "$WINE" ] || [ ! -f "$WINETRICKS" ] || [ ! -d "$WORK_FOLDER" ]; then 
+    clear
+    echo "Отсутствуют(ет):"
+    echo
+    if [ ! -f "$WINE" ]; then
+        echo "$WINE"
+    fi
+
+    if [ ! -f "$WINETRICKS" ]; then 
+        echo "$WINETRICKS"
+    fi
+
+    if [ ! -d "$WORK_FOLDER" ]; then 
+        echo "$WORK_FOLDER"
+    fi
+    exit
+fi
+
+# Создаём домашнюю директорию.
+if [ "$HOME" == "$DIR/home" ] && [ ! -d "$HOME" ]; then
+    mkdir "$HOME"
+fi
+
+# Копируем конфиги пульсы
+if [ "$HOME" == "$DIR/home" ]; then
+    if [ ! -d "$HOME/.config" ]; then 
+        mkdir -p "$HOME/.config"
+    fi
+
+     #if [ ! -d "$HOME/.pulse" ]
+     #then cp -R "$RHOME/.pulse" "$HOME"
+     #fi
+
+    if [ ! -d "$HOME/.config/pulse" ]; then 
+        cp -R "$RHOME/.config/pulse" "$HOME/.config"
+    fi
+fi
+
+# Обновляем префикс.
+if [ "$UPDATEPREFIX" == "yes" ]; then
+    if [ ! -d "$WINEPREFIX/drive_c/users/$USER" ]; then 
+        if [ "$WINE_USESYSWINE" == "yes" ]
+            then "/usr/bin/wineboot" -u
+        else
+            "$DIR/wine/bin/wineboot" -u
+        fi
+        # Disable d3d10 and d3d11
+        if [ "$WINE_FORCEDX9" == "yes" ]
+            then "$WINETRICKS" d3d10=disabled d3d11=disabled
+        fi
+    fi
+fi
+
+# Включаем звук.
+if [ "$USEALSA" == "yes" ] && [ ! -f "$DIR/alsa" ]; then
+    "$WINETRICKS" sound=alsa
+    echo > "$DIR/alsa"
+    rm -f "$DIR/pulse"
+elif [ "$USEALSA" == "no" ] && [ ! -f "$DIR/pulse" ]; then 
+    "$WINETRICKS" sound=pulse
+    echo > "$DIR/pulse"
+    rm -f "$DIR/alsa"
+fi
+
+# Включаем, или отключаем CSMT.
+if [ ! -f "$DIR/csmt.reg" ]; then
+    echo -e 'REGEDIT4\n\n[HKEY_CURRENT_USER\Software\Wine\DllRedirects]\n"wined3d"="wined3d-csmt.dll"' > "$DIR/csmt.reg"
+fi
+
+if [ ! -f "$DIR/non-csmt.reg" ]; then
+    echo -e 'REGEDIT4\n\n[HKEY_CURRENT_USER\Software\Wine\DllRedirects]\n\n"wined3d"=-' > "$DIR/non-csmt.reg"
+fi
+
+if [ -f "$DIR/csmt_on" ] && [ "$WINE_CSMT" == "off" ]; then
+    "$REGEDIT" "$DIR/non-csmt.reg"
+    rm "$DIR/csmt_on"
+elif [ ! -f "$DIR/csmt_on" ] && [ "$WINE_CSMT" == "on" ]; then
+    "$REGEDIT" "$DIR/csmt.reg"
+    echo > "$DIR/csmt_on"
+fi
+
+# Используем sandbox окружения скрипта winetricks.
+"$WINETRICKS" sandbox
+
+# Получаем нативное разрешение экрана.
+if [ "$WINE_FIXRES" == "yes" ]; then
+    if [ "$WINE_WINDOWED" == "no" ] && [ ! "$1" == "-sw" ] && [ -f "/usr/bin/xrandr" ]; then
+        export RESOLUTION="$(xrandr -q | awk -F'current' -F',' 'NR==1 {gsub("( |current)","");print $2}')"
+    else 
+        export WINE_FIXRES="no"
+    fi
+fi
+
+# Info output
+clear
+echo "WineBox Start"
+echo "$WINE_VER"
+echo "csmt: $WINE_CSMT"
+echo "===================="
+echo "application: $APP_NAME"
+echo "version: $APP_VER"
+echo "===================="
+echo "home: $HOME"
+echo
+
+# Запускаем приложение.
+cd "$WORK_FOLDER"
+if [ "$WINE_WINDOWED" == "yes" ] || [ "$1" == "-sw" ]; then
+    "$WINE" explorer /desktop=Game,$WINE_RESOLUTION "$APP_EXE"
+else 
+    "$WINE" "$APP_EXE"
+fi
+
+# Восстанавливаем разрешение экрана.
+if [ "$WINE_FIXRES" == "yes" ]; then
+    "/usr/bin/xrandr" -s "$WINE_RESOLUTION"
+fi

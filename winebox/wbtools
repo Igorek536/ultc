@@ -1,0 +1,93 @@
+#!/bin/bash
+
+########################################################
+
+### WineBox - набор скриптов для удобного портирования программ
+### в Wine. Данный набор скриптов основан на скриптах от Kron'a.
+### Суть работы заключается в создании изолированного
+### префикса, в котором и содержится программа. Одновременно в
+### префиксе может содержиться лишь одна программа, однако
+### допускается установка дополтинельных программ-зависимостей.
+
+### WineBox Tools - скрипт, предназначенный для удобного запуска
+### разнообразных, специфичных для Wine программ, таких как редактор
+### реестра, или программа настройки(winecfg). Также содержит ряд
+### полезных функций, таких как уюийство процесса и запуск Winetricks.
+
+### Данный скрипт требует минимальной настройки. Вам всего лишь нужно
+### указать ниже какой вайн использовать(системный ли использовать?).
+
+########################################################
+# Параметры, специфичные для Wine:
+# export WINE_USESYSWINE="yes"         - Использовать ли системный Wine?
+#                                        Подробное описание дано в скрипте wbstart, там есть такой же параметр.
+
+export WINE_USESYSWINE="yes"
+########################################################
+
+# Папки
+export SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+export DIR="$(dirname "$SCRIPT")"
+export HOME="$DIR/home"
+
+# Wine
+if [ "$WINE_USESYSWINE" == "yes" ]; then
+    export WINE="/usr/bin/wine"
+    export WINECFG="/usr/bin/winecfg"
+    export REGEDIT="/usr/bin/regedit"
+    export CONSOLE="/usr/bin/wineconsole"
+    export WINEFILE="/usr/bin/winefile"
+    export WINESERVER="/usr/bin/wineserver"
+else
+    export WINE="$DIR/wine/bin/wine"
+    export WINECFG="$DIR/wine/bin/winecfg"
+    export REGEDIT="$DIR/wine/bin/regedit"
+    export CONSOLE="$DIR/wine/bin/wineconsole"
+    export WINEFILE="$DIR/wine/bin/winefile"
+    export WINESERVER="$DIR/wine/bin/wineserver"
+fi
+
+export WINEDEBUG="-all"
+export WINEDLLOVERRIDES="mscoree,mshtml="
+export WINEPREFIX="$DIR/prefix"
+export WINETRICKS="$DIR/winetricks"
+
+# Arguments
+export ARGS="-cfg, -reg, -console, -fm, -kill, -tri, -clean"
+
+## Actions
+
+# Create a home directory
+if [ "$HOME" == "$DIR/home" ] && [ ! -d "$HOME" ]; then
+    mkdir "$HOME"
+fi
+
+if [ "$1" == "-cfg" ]; then
+    "$WINECFG"
+elif [ "$1" == "-reg" ]; then
+    "$REGEDIT"
+elif [ "$1" == "-console" ]; then
+    "$CONSOLE"
+elif [ "$1" == "-fm" ]; then
+    "$WINEFILE"
+elif [ "$1" == "-kill" ]; then
+    "$WINESERVER" -k
+elif [ "$1" == "-tri" ]; then
+    "$WINETRICKS" $2 $3 $4 $5 $6 $7 $8
+elif [ "$1" == "-clean" ];then
+    rm -f "$DIR/csmt_on"
+    rm -f "$DIR/alsa"
+    rm -f "$DIR/pulse"
+    rm -rf "$DIR/home"
+    rm -f "$WINEPREFIX/user.reg"
+    rm -f "$WINEPREFIX/userdef.reg"
+    rm -rf "$WINEPREFIX/dosdevices"
+    rm -f "$WINEPREFIX/winetricks.log"
+    rm -rf "$WINEPREFIX/drive_c/users"
+    rm -f "$WINEPREFIX/.update-timestamp"
+else 
+    clear
+    echo "Доступные аргументы:"
+    echo
+    echo "$ARGS"
+fi
